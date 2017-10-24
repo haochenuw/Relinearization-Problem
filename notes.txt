@@ -1,0 +1,11 @@
+1. define boxtimes [x]
+
+2. redefine circuit.  [x]
+
+3. Define knapsack problem. [x]
+
+4. Prove explicit constant in Lemma [x]
+
+5. use squarings in the pictures. [ ]
+
+
