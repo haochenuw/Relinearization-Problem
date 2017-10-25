@@ -946,7 +946,7 @@ the proof.
 
 
 \begin{lemma} \label{lem: constraint}
-Suppose $KT k_m > k_r$.  Then for any optimal solution to the relinearization problem on $G^0$ we must have 
+Suppose $k_m KT > k_r$.  Then for any optimal solution to the relinearization problem on $G^0$ we must have 
 \[
 	\sum l_i w_i \leq  W':= W + \sum_{i =1}^n w_i. 
 \]
@@ -961,7 +961,7 @@ $$
 (\cL(w_1) \boxtimes \cL(w_2)) \cdots \boxtimes \cL(w_n))$$
 
 is reduced by $w_i$. Since $\sum l_i w_i > W'$, the length of the input vertex in each $\cL(T)$ is reduced by at least one, and the cost reduction from each $\cL(T)$ is at least $k_m T$. Hence we the benefit 
-we collect from relinearizing $s_i$ is at least $k_m KT$, whereas the cost is $k_r$. Since we assumed $KT > k_r$, we know relinearizing the vertex $s_i$ reduces  the total cost. This is a contradiction, since we started with an optimal solution. 
+we collect from relinearizing $s_i$ is at least $k_m KT$, whereas the cost is $k_r$. Since we assumed $k_m KT > k_r$, we know relinearizing the vertex $s_i$ reduces  the total cost. This is a contradiction, since we started with an optimal solution. 
 \end{proof}
 
 
