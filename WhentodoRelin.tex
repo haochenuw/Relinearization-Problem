@@ -60,7 +60,7 @@
 \newcommand{\Enc}{{\bf Enc }}
 \newcommand{\Relin}{{\bf Relin }}
 %%% END Article customizations
-
+\usepackage{authblk}
 \usepackage{amsthm}
 \theoremstyle{plain}
 \newtheorem{theorem}{Theorem}
@@ -71,14 +71,17 @@
 \newtheorem{definition}{Definition}
 \def\rem#1{{\marginpar{\raggedright\scriptsize #1}}}
 
+\renewcommand\Affilfont{\small}
+
 %%% The "real" document content comes below...
 
 \title{Optimizing relinearization in circuits for homomorphic encryption}
 
 \author[]{Hao Chen}
-\affil{\small{Microsoft Research, Redmond WA, USA} \\
-
+% \affil{Microsoft Research}
+\affil[]{Microsoft Research \\
 \texttt{haoche@microsoft.com}}
+
 \date{}
 \begin{document}
 \maketitle  % Activate to display a given date or no date (if empty),
@@ -89,20 +92,18 @@
 Fully homomorphic encryption (FHE) allows an untrusted party to evaluate arithmetic circuits,  i.e., perform additions and multiplications on encrypted data, without having the decryption key. 
 
 
-Currently, the most widely known FHE schemes are those based on the hardness of the RLWE problem, and they share some common features. Ciphertext sizes grow after each homomorphic multiplication; multiplication is much more costly than addition, and the cost of homomorphic multiplication scales linearly with the input ciphertext sizes. Furthermore, there is a special {\it relinearization} operation that reduce the size of a ciphertext, and the cost of relinearization is on the same order of magnitude as homomorpic multiplication. This motivates us to define a discrete optimization problem, which is to decide where (and how much) in a given circuit to relinearize,  in order to minimize the total computational cost. 
+One of the most efficient class of FHE schemes include BGV/FV schemes, which are based on the hardness of the RLWE problem. They share some common features: ciphertext sizes grow after each homomorphic multiplication; multiplication is much more costly than addition, and the cost of homomorphic multiplication scales linearly with the input ciphertext sizes. Furthermore, there is a special {\it relinearization} operation that reduce the size of a ciphertext, and the cost of relinearization is on the same order of magnitude as homomorpic multiplication. This motivates us to define a discrete optimization problem, which is to decide where (and how much) in a given circuit to relinearize,  in order to minimize the total computational cost. 
 
 In this paper, we formally define the {\it relinearize problem}. We prove that the problem is NP-hard. In addition, in the special case where each vertex has at most one outgoing edge, we give a polynomial-time algorithm. 
 \end{abstract}
 
 \section{Introduction}
 
-Fully homomorphic encryption (FHE) is an encryption technique which allows any untrusted party to evaluate functions on encrypted data.  As a typical application, FHE allows a client to outsource computation to an untrusted cloud. It has generated great interest in fields such as health and finance, due to the need to analyze sensitive data without having access to the data itself. Since Gentry introduced the first FHE scheme in 2009, there has been a line of works that proposed new FHE schemes with improved efficiency, among which two of the most widely used schemes are \cite{brakerski2014leveled} and its scale-invariant counterpart \cite{fan2012somewhat}. Implementations of these schemes include \cite{halevi2014algorithms}, \cite{chensimple}, and \cite{aguilar2016nfllib}. There has been numerous work that design applications based on these schemes. Some of them (\cite{gilad2016cryptonets,bos2017privacy}) evaluate machine learning models on encrypted data. Others use FHE to design secure protocols such as private information retrieval \cite{melchor2016xpir} and private set intersection \cite{chen2017fast}.
+Fully homomorphic encryption (FHE) is an encryption technique which allows any untrusted party to evaluate functions on encrypted data without the decryption key.  As a typical application, FHE allows a client to outsource computation to an untrusted cloud. It has generated interest in fields such as health and finance, due to the need to analyze sensitive data without having access to the data itself. Since Gentry introduced the first FHE scheme in 2009, there has been a line of work that proposed new FHE schemes with improved efficiency, among which two of the most widely used schemes are \cite{brakerski2014leveled} and its scale-invariant counterpart \cite{fan2012somewhat}. Implementations of these schemes include \cite{halevi2014algorithms}, \cite{chensimple}, and \cite{aguilar2016nfllib}. There has been numerous work that design applications based on these schemes. Some of them (\cite{gilad2016cryptonets,bos2017privacy}) evaluate machine learning models on encrypted data. Others use FHE to design secure protocols such as private information retrieval \cite{melchor2016xpir} and private set intersection \cite{chen2017fast}.
 
 
 
-Unfortunately, in these schemes homomorphic operations are still several-orders of magnitude slower than performing the same operation on plaintexts. Therefore, any optimization in the computation time has great interest.
-
-In order to use FHE to evaluate a function, one first needs to express the function as an arithmetic circuit. The circuit is represented as a direct acyclic graph with each vertex being either an input, a multiplication, or an addition. In both schemes mentioned above, a fresh ciphertext is a vector of length two. When a homomorphic multiplication is performed, the length of the output ciphertext grows. More precisely, if we denote the 
+Unfortunately, in these schemes homomorphic operations are still several-orders of magnitude slower than performing the same operation on plaintexts. Therefore, any optimization in the computation time has great interest. In order to use FHE to evaluate a function, one first needs to express the function as an arithmetic circuit. The circuit is represented as a direct acyclic graph with each vertex being either an input, an output, or an arithmetic operation such as multiplication and addition. In both schemes mentioned above, a fresh ciphertext is a pair of polynomials. When a homomorphic multiplication is performed, the length of the output ciphertext grows. More precisely, if we denote the 
 length of a ciphertext $c$ by $l(c)$, then $l(  c_1 \otimes c_2 ) = l(c_1) +  l(c_2) - 1$. The length of the result of a homomorphic addition is the maximum length of the two operands, i.e., $l(  c_1 \oplus c_2 ) = \max\{l(c_1), l(c_2)\}$. 
 
 Rouhgly speaking, the computational cost to perform a homomorphic multiplication scales linearly with its input lengths. In both schemes, 
@@ -110,15 +111,16 @@ we can model the amount of work it takes to perform a homomorphic multiplication
 \[
 	k_m (l(c_1) + l(c_2)), 
 \] 
-where $k_m$ is some scheme-dependent constant. In FHE, there is also a squaring operation, which takes as input an encryption of $x$ and returns an encryption of $x^2$. It has the same cost and length effect as multiplication, but only takes one input. 
-
+where $k_m$ is some scheme-dependent constant. In FHE, there is also a squaring operation, which takes as input an encryption of $x$ and returns an encryption of $x^2$. It has the same cost \footnote{Actually, the cost of squaring $x$ is a constant factor smaller than multiplying $x$ with itself. For simplicity, we will assume that the costs are equal. This simplification does not invalidate the results.} and length effect as multiplication, but only takes one input. 
 
 Homomorphic additions, on the other hand, takes much less time to perform compared to multiplication. Hence in this work we will assume that additions are ``free''.  For the same reason, we will adopt the common notation from the FHE literature, and denote by depth of a circuit by the largest number of multiplication vertices contained in a path. 
 
 Note that it is undesirable to let the ciphertext sizes grow, since it will increase both the computational cost and the storage burden. To control the ciphertext sizes, both schemes support a special operation called \emph{Relinearization}. Effectively, relinearizing a ciphertext means reducing its length, while keeping the underlying message the same. We can use this operation to reduce the length of a ciphertext to any integer between two and its original length.  The cost of relinearization scales linearly with the reduction in ciphertext length. In other words, there exists a constant $k_r$ such that reducing the ciphertext lengths by $i$ takes $i \cdot k_r $ units of work. 
 
-Suppose we are given an arithmetic circuit to perform on encrypted inputs. It is now an optimization problem to decide where and how much to relinearize, in order to minimize the total amount of work, consisting of multiplication cost and relinearization cost. Previous works almost always employ a simple strategy, which is to relinearize at every multiplication. In this way, the multiplication costs are kept minimal, since the lengths of inputs to any multiplication vertex are always 2 -- the smallest possible. 
+Suppose we are given an arithmetic circuit to perform on encrypted inputs. It is now an optimization problem to decide where and how much to relinearize, in order to minimize the total amount of work, consisting of multiplication cost and relinearization cost. Previous works employ the simple strategy of relinearizing after every multiplication/squaring. In this way, the multiplication costs are kept minimal. However, this strategy is not always optimal, as we will demonstrate in Section~\ref{sec: example}. 
 
+
+\subsection{Roadmap}
 In Section 2, we will formally describe the problem and show why this simple strategy can be sub-optimal. In Section 3, we prove that the relinearize problem is NP-hard by reducing from the knapsack problem. Finally, in Section 4, we restrict to the special case where each vertex in the circuit has at most one outgoing edge, and give a polynomial time algorithm. 
 
 \subsection{Related work}
@@ -129,7 +131,7 @@ find a good circuit representation of a function, in order to minimize the total
 Bootstrapping is an operation that refreshes the so-called noise in FHE ciphertexts. It is an essential yet expensive operation. The two papers \cite{lepoint2013minimal} and \cite{benhamouda2017optimization} aim at minimizing the total number of bootstrapping operations in a circuit, while keeping the noise from overflowing in order to ensure the final result is correct. In their work, the authors implicitly assume the relinearization is done after every multiplication. Similarly, we will make a simplifying assumption that the boostrapping time is a constant, so that it does not factor into our optimizatoin problem. It will be interesting to combine these works in order to achieve an overall optimization that targets both operations. 
 
 
-{\bf Acknowledgement} The author thanks Rebecca Hoberg and Mohit Singh for helpful discussions in preparing this work. 
+{\bf Acknowledgement} The author thanks Rebecca Hoberg and Mohit Singh for helpful discussions in preparing this work. We modify the usual definition of the arithmetic circuits to include the squaring operations in FHE.
 
 
 
@@ -141,8 +143,8 @@ To formally describe our problem, we need to properly define circuits used in FH
 a (squaring-enabled) arithmetic circuit is a directed acyclic graph $G = (V,E)$, where there are three kinds of vertices: input vertices has indegree 0 and outdegree 1; output vertices has indegree $\in \{1, 2\}$ and outdegree 0; add/multiply operation vertices have indegree 2 and outdegree 1; finally, square operation vertices have indegree and outdegree both equal to 1. 
 \end{definition}
 
-We will define the relinearize problem as an integer programming problem on  arithmetic circuits. For every vertex $i$ we maintain an integer variable $l^{new}(i)$ (the final length of vertex $i$ during homomorphic evaluation of $G$), and an integer 
-variable $x_i$, which indicates the amount of relinearization at $i$. We will denote the two parents of a vertex $i$ by $p_1(i)$ and $p_2(i)$. By convention, if $i$ is a squaring node, then we set $p_1(i) = p_2(i)$. We denote addition vertices by $\oplus$ and multiplication/square vertices by $\otimes$. To resolve ambiguity, we make the convention that if a $\otimes$ vertex has two distinct parents, then it is understood as a multiplication; otherwise it is a squaring.
+We will define the relinearize problem as an integer programming problem on  arithmetic circuits. For every vertex $i$, we maintain an integer variable $l^{new}(i)$ (the final length of vertex $i$ during homomorphic evaluation of $G$), and an integer 
+variable $x_i$, which indicates the amount of relinearization at $i$. We will denote the two parents of a vertex $i$ by $p_1(i)$ and $p_2(i)$. If $i$ is a squaring vertex, then we set $p_1(i) = p_2(i)$. We denote addition vertices by $\oplus$ and multiplication/square vertices by $\otimes$. To resolve ambiguity, we make the convention that if a $\otimes$ vertex has two distinct parents, then it is understood as a multiplication; otherwise it is a squaring.
 
 Then the {\it relinearize problem} on $G$ is 
 \[
@@ -158,7 +160,8 @@ l^{new}(i)  \geq l^{new}(p_2(i))  - x_i  & \qquad & \mbox{if } i = \oplus \\
 x_i, l^{new}(i) \in \bZ_{\geq 0}  & \qquad &\mbox{ for all } i \\
 \end{align*}
 
-\subsection{An example} To demonstrate the non-trivality of the relinearize problem,  we consider the following circuit: 
+\subsection{An example} \label{sec: example} 
+To demonstrate the non-trivality of the relinearize problem,  we consider the following circuit: 
 \begin{center}
 \begin{tikzpicture}[commutative diagrams/every diagram] 
 \node (Pfinal) at (2,2) {$\otimes$}; 
@@ -191,44 +194,11 @@ x_i, l^{new}(i) \in \bZ_{\geq 0}  & \qquad &\mbox{ for all } i \\
 \end{tikzpicture}
 \end{center}
 
-First, we apply the simple strategy and relinearize at every multiplication vertex. Then the total cost is equal to $12 k_m + 3k_r$. 
+First, we apply the simple strategy and relinearize at every multiplication vertex. Then the total cost is equal to $12 k_m + 3k_r$. Alternatively, we can choose to only relinearize the vertex $u$. Then the multiplication cost increases to $14k_m$, while the relinearization cost is $k_r$, so the total cost is $14k_m + k_r$. Comparing this with the previous cost, we see that as long as  $k_r > k_m$, the simple strategy is not optimal. 
 
 %The costs and lengths of the nodes are labeled as below: (we have used \red{red} for length and \blue{ blue} for multiplication cost, green for relinearization cost ). 
 
-\iffalse
-\begin{center}
-\begin{tikzpicture}[commutative diagrams/every diagram] 
-\node (P0) at (2,5) {\red{6} \blue{26}}; 
-\node (P1) at (1,3) {\red{4} \blue{18}} ; 
-\node (P2) at (3,3) {\red{3} \blue{0}};
-\node (P3) at (0,1) {\red{2} \blue{0}};
-\node (P4) at (2,1) {\red{3} \blue{14}};
-\node (P5) at (4,1) {\red{2} \blue{0}};
-\node (P6) at (-0.5,-1) {\red{2} \blue{0}};
-\node (P7) at (0.5,-1) {\red{2} \blue{0}};
-\node (P8) at (1.5,-1) {\red{2} \blue{0}};
-\node (P9) at (2.5,-1) {\red{2} \blue{0}};
-\node (P10) at (3.5,-1) {\red{2} \blue{0}};
-\node (P11) at (4.5,-1) {\red{2} \blue{0}};
-\path[commutative diagrams/.cd, every arrow, every label] 
 
-(P1) edge node[swap] {} (P0)  
-(P2) edge node[swap] {} (P0) 
-(P3) edge node {} (P1) 
-(P4) edge node {} (P1) 
-(P4) edge node {} (P2) 
-(P5) edge node {} (P2)
-(P6) edge node {} (P3)
-(P7) edge node[swap] {} (P3)
-(P8) edge node {} (P4)
-(P9) edge node[swap] {} (P4)
-(P10) edge node  {}  (P5)
-(P11) edge node[swap] {} (P5);
-\end{tikzpicture}
-\end{center}
-The total cost is 14 + 18 + 26 = 58.  (FIXME) 
-\fi
-Alternatively, we can choose to only relinearize the vertex $u$. Then the multiplication cost increases to $14k_m$, while the relinearization cost is $k_r$, so the total cost is $14k_m + k_r$. Comparing this with the previous cost, we see that as long as  $k_r > k_m$, the simple strategy is not optimal. 
 
 
 % {\it Question}: does there exist a polynomial time algorithm for the Relinearization problem?
@@ -593,14 +563,14 @@ The web of addition can be solved in polynomial time: in fact we can write it as
 
 \section{NP-hardness of the Relinearize Problem}
 
-In this section, we prove a polynomial reduction from the knapsack problem to the relinearize problem, which establishes that the latter problem is NP-hard.  First we recall the definition of  knapsack problem. 
+We prove a polynomial reduction from the knapsack problem to the relinearize problem, which establishes that the latter problem is NP-hard.  First we recall the definition of  knapsack problem. 
 
 
 \begin{definition}
-Given positive integers $v_1, \ldots, v_n$, $w_1, \ldots ,w_n$, and $W$. The (0-1) knapsack problem is:
+Given positive integers $v_1, \ldots, v_n$, $w_1, \ldots ,w_n$ and $W$. The (0-1) knapsack problem is:
 \begin{align*}
-\mbox{maximize} \sum_{i=1}^{n} v_i x_i \\
-\mbox{subject to } x_i \in \{0,1\}
+\mbox{maximize} &\sum_{i=1}^{n} v_i x_i \\
+\mbox{subject to } & x_i \in \{0,1\}
 \mbox{ and }  \sum w_i x_i \leq W. 
 \end{align*}
 \end{definition}
@@ -608,7 +578,7 @@ Given positive integers $v_1, \ldots, v_n$, $w_1, \ldots ,w_n$, and $W$. The (0-
 
 
 
-For our convenience, we make some modifications to the setting of the relinearize problem. We change the inputs lengths from two to one, and instead of $l(c1 \otimes c2) = l(c1) + l(c2)-1$, we maintain that $l(c1 \otimes c2) = l(c1) + l(c2)$.  Indeed, under this formulation  the length of every vertex is smaller by one. Hence it is equivalent to the original problem.
+For our convenience, we make some modifications to the setting of the relinearize problem. We change the inputs lengths from two to one, and we modify the equation $l(c1 \otimes c2) = l(c1) + l(c2)-1$ to $l(c1 \otimes c2) = l(c1) + l(c2)$.  One can check that under this modificaiton, the length of every vertex is smaller by one. Hence the modified problem is equivalent to the original problem.
 
 %\begin{lemma}
 %Under this new formulation every node have $l'(c) = l(c) - 1$. 
@@ -643,7 +613,7 @@ Figure~\ref{fig: L7} is an example of $\cL(7)$.
 (P5) edge[bend left]   (P2)
 (P5) edge (P4) 
 %(P5) edge[bend right]  (P4)
-(P6) edge (P5) 
+(P6) edge (P5);
 %(P6) edge[bend right]  (P5);
 %(P1) edge node {} (P0)  
 %(P2) edge node[bend left] {} (P1)
@@ -657,7 +627,7 @@ Figure~\ref{fig: L7} is an example of $\cL(7)$.
 
 
 \begin{lemma} \label{lem: one}
-For all integers $k \geq 1$, there exists a circuit of type $\cL(k)$ which has at most $2 \lceil \log k \rceil$ vertices. Moreover, its multiplication cost is bounded above by $4 k_m k \lceil \log(k) \rceil$.
+For all integers $k \geq 1$, there exists a circuit of type $\cL(k)$ which has at most $2 \lceil \log k \rceil$ vertices. Moreover, the  cost to evaluate this circuit is bounded above by $4 k_m k \lceil \log(k) \rceil$.
 \end{lemma}
 
 \begin{proof}
@@ -781,7 +751,6 @@ Let $K$ be a positive integer. Then we keep the vertices $s_i$ and all their anc
 (P2) edge (P3)
 (P1) edge (P4)
 (P2) edge (P4); 
-
 %\draw [ ->](0.8,-0.8) to (1.8,1); 
 %\draw [ ->] (3.2, -0.8) to (2.2,1);
 %(P1) edge node[swap] {} (P0)  
@@ -876,6 +845,7 @@ Let $K$ be a positive integer. Then we keep the vertices $s_i$ and all their anc
 
 
 % Final example
+
 \begin{figure}
 \begin{tikzpicture}[commutative diagrams/every diagram] 
 \node (P1) at (2,2) {$\otimes$};
@@ -885,7 +855,7 @@ Let $K$ be a positive integer. Then we keep the vertices $s_i$ and all their anc
 \path[commutative diagrams/.cd, every arrow, every label] 
 (P3) edge (P2)
 (P4) edge (P2)
-(P2) edge (P1)
+(P2) edge (P1);
 %(P2) edge[bend right] (P1); 
 %\draw [ ->](0.8,-0.8) to (1.8,1); 
 %\draw [ ->] (3.2, -0.8) to (2.2,1);
@@ -896,12 +866,10 @@ Let $K$ be a positive integer. Then we keep the vertices $s_i$ and all their anc
 \node (P5) at (2,3) {$G_1$};;
 \node (P5) at (7,3) {$G_2$};;
 \node (P5) at (13,3) {$G_1 \star_{s_1} G_2$};;
-
-
 \node (P6) at (5,0) {\textbigcircle};;
 \node (P7) at (7,0) {\textbigcircle};;
 \node (P8) at (9,0) {\textbigcircle};;
-\node (P9) at (6,1) {$\otimes$ $s_2$};
+\node (P9) at (6,1) {$\otimes$ $s_1$};
 \node (P10) at (8,1) {$\oplus$};
 \node (P11) at (7,2) {$\otimes$};
 \path[commutative diagrams/.cd, every arrow, every label] 
@@ -937,7 +905,6 @@ Let $K$ be a positive integer. Then we keep the vertices $s_i$ and all their anc
 
 
 
-
 Now we are ready to state our main theorem. Consider a knapsack problem with parameters $v_i (1 \leq i \leq n), w_i (1\leq i\leq n)$ and $W$. 
 
 \iffalse
@@ -968,18 +935,18 @@ Since our proof is long, we will break it into several parts. First, let $K, T$ 
 Here $W' = W + \sum_i w_i$, and $S = \{s_1, \ldots, s_n\}$, where $s_i$ is the first non-input vertex in the circuit $\cL(w_i)$. In particular, with no relinearization the length of $s_i$ is equal to 2. Consider the relinearize problem on the circuit $G^0$ and let $l_i$ be the new lengths of $s_i$. Without loss of generality,  we assume that $w_i \leq W$ for all $i$ (if $w_i> W$,  then  any optimal solution of the knapsack problem always have $x_i = 0$, and we can reduce the dimension of the problem by one). 
 
 \begin{lemma} \label{lem: constraint}
-Suppose $$k_r > T\log T +W' \log W',$$  and $k_m =1$. Then for any optimal solution to the relinearize problem on $G^0$, the only vertices that could have nonzero relinearization are the $s_i$. 
+Suppose $$k_r >  4k_m(T\log T +W' \log W'),$$  and $k_m =1$. Then for any optimal solution to the relinearize problem on $G^0$, the only vertices that could have nonzero relinearization are the $s_i$. 
 \end{lemma}
 
 \begin{proof}
-We proved that the total cost of evaluating $\cL(T)$ is bounded by $T\log T$, hence relinearizing any single vertex in this circuit has benefit bounded by $T\log T$. The situation is similar for $\cL(W')$. Note that relinearizing verteices in $\cL(W')$ 
-could reduce the length of vertices in $\cL(T)$, but the benefit is still bounded above by $T\log T + W'\log W'$. For the same reason, the benefit of relinearizing any vertex in any of the $K$ copies of $\cL(w_i)$ is bounded by $T\log T + w_i \log w_i$. Since $w_i \leq W'$, this completes
+By Lemma~\ref{lem: one},  the total cost of evaluating a circuit of type $\cL(T)$ is bounded by $4 k_m T\log T$, hence relinearizing any single vertex in this circuit has benefit bounded by $4k_m T\log T$. The situation is similar for $\cL(W')$. Note that relinearizing verteices in $\cL(W')$ 
+could reduce the length of vertices in $\cL(T)$, but the benefit is still bounded above by $4k_m(T\log T + W'\log W')$. For the same reason, the benefit of relinearizing any vertex in any of the $K$ copies of $\cL(w_i)$ is bounded by $4k_m(T\log T + w_i \log w_i)$. Since $w_i \leq W'$, this completes
 the proof.
 \end{proof}
 
 
 \begin{lemma} \label{lem: constraint}
-Suppose $KT > k_r$ and $k_m =1$.  Then for any optimal solution to the relinearization problem on $G^0$ we must have 
+Suppose $KT k_m > k_r$.  Then for any optimal solution to the relinearization problem on $G^0$ we must have 
 \[
 	\sum l_i w_i \leq  W':= W + \sum_{i =1}^n w_i. 
 \]
@@ -993,8 +960,8 @@ Suppose the claim is false. Then there exists $i$ such that $l_i = 2$. We reline
 $$
 (\cL(w_1) \boxtimes \cL(w_2)) \cdots \boxtimes \cL(w_n))$$
 
-is reduced by $w_i$. Since $\sum l_i w_i > W'$, the length of the input vertex in each $\cL(T)$ is reduced by at least one, and the benefit we gain from each $\cL(T)$ is at least $T$. Hence we the benefit 
-we collect from relinearizing $s_i$ is at least $KT$, whereas the cost is $k_r$. Since we assumed $KT > k_r$, we know relinearizing the vertex $s_i$ reduces  the total cost. This is a contradiction, since we started with an optimal solution. 
+is reduced by $w_i$. Since $\sum l_i w_i > W'$, the length of the input vertex in each $\cL(T)$ is reduced by at least one, and the cost reduction from each $\cL(T)$ is at least $k_m T$. Hence we the benefit 
+we collect from relinearizing $s_i$ is at least $k_m KT$, whereas the cost is $k_r$. Since we assumed $KT > k_r$, we know relinearizing the vertex $s_i$ reduces  the total cost. This is a contradiction, since we started with an optimal solution. 
 \end{proof}
 
 
@@ -1005,8 +972,8 @@ Now we can starting proving Theorem~\ref{thm}.
 
 \begin{proof} (of Theorem~\ref{thm}) 
 Let 
-$M = W + \sum_i w_i + \sum_i v_i$. We start by taking $T = \lceil 5M \log M \rceil$, $k_r = 19 \lceil M \log M \log(M \log M) \rceil$,  $K = 4 \lceil \log(M \log M) \rceil$, and $k_m = 1$. It is easy to see that $K,T, k_r$ are of size polynomial in $W, w_i, v_i$. One can verify that 
-$KT > k_r$ and $k_r > T\log T + W' \log W'$. Thus, by Lemma~\ref{lem: constraint}, we have $\sum l_i w_i \leq W'$ if $l_i$ are the new length of $s_i$ in any optimal solution to the relinearization problem on $G^0$. This means we have the correct constraint. However, the costs are wrong: the total cost of evaluating the circuit $G^0$ is given by 
+$M = W + \sum_i w_i + \sum_i v_i$. We take $T = \lceil 5M \log M \rceil$, $k_r = 25 \lceil M \log M \log(M \log M) \rceil$,  $K = 6 \lceil \log(M \log M) \rceil$ and $k_m = 1$. It is easy to see that $K,T, k_r$ are of size polynomial in $W, w_i, v_i$. One can verify that 
+$k_m KT > k_r$ and $k_r > 4k_m( T\log T + W' \log W')$. Thus, by Lemma~\ref{lem: constraint}, we have $\sum l_i w_i \leq W'$ if $l_i$ are the new length of $s_i$ in any optimal solution to the relinearization problem on $G^0$. This means we have the correct constraint. However, the costs are wrong: the total cost of evaluating the circuit $G^0$ is given by 
 \[
 	K(\sum r_i l_i) +\sum_i k_r (2 - l_i) + C, 
 \]
@@ -1019,24 +986,24 @@ Note that the coefficient before $l_i$ is equal to $Kr_i - k_r$, and we want to 
 \begin{align*}
 Kr_i - k_r &\leq K 4 w_i \log w_i - k_r  \\
 &\leq 4 K \lceil M \log M \rceil - k_r  \\
-&\leq -3 \lceil M \log M \log(M\log M) \rceil \\
+&\leq (24 - 25) \lceil M \log M \log(M\log M) \rceil \\
 &\leq -M  \\
 &\leq -v_i, \forall i. 
 \end{align*}
 Let $\lambda_i = k_r - Kr_i - v_i \in \bZ_{\geq 0}$. We claim that there exists a circuit $\cL'(\lambda_i)$ of  such that relinearizing its first non-input vertex  reduces the total multiplication cost by $\lambda_i$. We omit the details of construction of $\cL'$ since it is similar to that of $\cL$. In particular, 
-the $\cL'(\lambda_i)$ can be constructed with at most 2 \log (\lambda_i)$ vertices. We then let 
+the $\cL'(\lambda_i)$ can be constructed with at most $2 \log (\lambda_i)$ vertices. We then let 
 \[
 	G^1 = G^0 \star_{s_1} \cL'(\lambda_1), \ldots, 	G^i = G^{i-1} \star_{s_i} \cL'(\lambda_i), \ldots, G^n = G^{n-1} \star_{s_n}  \cL'(\lambda_n)
 \]
-and set $G = G^n$. Since $\lambda_i < k_r$, we know that in any optimal solution of the relinearize problem on $G$, the vertices in $\cL'(\lambda_i)$ have zero relinearization. Thus, the relinearize problem on $G$ is equivalent to 
+and set $G = G^n$. Since $\lambda_i < k_r$, one can see that in any optimal solution of the relinearize problem on $G$, the vertices in $\cL'(\lambda_i)$ have zero relinearization. Thus, the relinearize problem on $G$ is equivalent to 
 \[
-\min \sum -v_i l_i + C',  \mbox{ s.t. }  l_i \in \{1, 2\}, \sum w_i l_i \leq W + \sum w_i, 
+\min \sum_{i=1}^{n} -v_i l_i + C',  \mbox{ s.t. }  l_i \in \{1, 2\} \mbox{ and } \sum_{i=1}^{n} w_i l_i \leq W + \sum w_i, 
 \]
 which is equivalent to 
 \[
-\max \sum v_i l_i,  \mbox{ s.t. }  l_i \in \{1, 2\}, \sum w_i l_i \leq W + \sum w_i.
+\max \sum_{i=1}^{n} v_i l_i,  \mbox{ s.t. }  l_i \in \{1, 2\} \mbox{ and } \sum_{i=1}^{n}  w_i l_i \leq W + \sum w_i.
 \]
-This proves part (3) of Theorem~\ref{thm}. Now (1) is clear since the number of vertices in $G$ is bounded by $2K ( \log(T) + \log(W') +  \sum_{i=1}^n \log(w_i) ) + 2\sum_{i=1}^n \log(\lambda_i)$. Hence it is logarithm in the parameters $v_i, w_i, W$ and linear in the number of variables $n$. For (2), note that we set $k_m =1$, so it suffices to prove it for $k_r$. By construction,  $k_r$ is also bounded by a polynomial in $v_i, w_i, W$. This completes the proof.
+This proves part (3) of Theorem~\ref{thm}. Part (1) is clear since the number of vertices in $G$ is bounded by $2K ( \log(T) + \log(W') +  \sum_{i=1}^n \log(w_i) ) + 2\sum_{i=1}^n \log(\lambda_i)$. Hence it is logarithm in the parameters $v_i, w_i, W$ and linear in the number of variables $n$. For (2), note that we set $k_m =1$, so it suffices to prove it for $k_r$. By construction,  $k_r$ is also bounded by a polynomial in $v_i, w_i, W$. This completes the proof.
 \end{proof}
 
 \begin{corollary}
